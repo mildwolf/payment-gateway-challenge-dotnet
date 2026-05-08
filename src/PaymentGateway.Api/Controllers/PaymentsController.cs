@@ -4,6 +4,7 @@ using PaymentGateway.Api.Models;
 using PaymentGateway.Api.Models.Requests;
 using PaymentGateway.Api.Models.Responses;
 using PaymentGateway.Api.Services;
+using PaymentGateway.Api.Services.Contracts;
 
 namespace PaymentGateway.Api.Controllers;
 
@@ -47,10 +48,10 @@ public class PaymentsController : ControllerBase
         _logger.LogInformation("Payment request received for card ending {LastFour}",
             request.CardNumber.Length >= 4 ? request.CardNumber[^4..] : "****");
 
-        var validationErrors = _paymentValidator.Validate(request);
-        if (validationErrors.Count > 0)
+        var validationResult = _paymentValidator.Validate(request);
+        if (!validationResult.IsValid)
         {
-            _logger.LogWarning("Payment rejected due to validation errors: {Errors}", string.Join(", ", validationErrors));
+            _logger.LogWarning("Payment rejected due to validation errors: {Errors}", string.Join(", ", validationResult.Messages));
             return Ok(new PostPaymentResponse
             {
                 Id = Guid.Empty,
@@ -63,9 +64,9 @@ public class PaymentsController : ControllerBase
             });
         }
 
-        var authorized = await _bankService.ProcessPaymentAsync(request);
+        var bankResponse = await _bankService.ProcessPaymentAsync(request);
 
-        var status = authorized is true
+        var status = bankResponse?.Authorized is true
             ? PaymentStatus.Authorized
             : PaymentStatus.Declined;
 
@@ -79,7 +80,8 @@ public class PaymentsController : ControllerBase
             ExpiryMonth = request.ExpiryMonth,
             ExpiryYear = request.ExpiryYear,
             Currency = request.Currency,
-            Amount = request.Amount
+            Amount = request.Amount,
+            AuthorizationCode = bankResponse?.AuthorizationCode ?? string.Empty
         };
 
         _paymentsRepository.Add(payment);

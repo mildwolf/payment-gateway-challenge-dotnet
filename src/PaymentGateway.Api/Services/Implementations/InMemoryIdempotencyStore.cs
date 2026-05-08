@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using PaymentGateway.Api.Models.Responses;
+using PaymentGateway.Api.Services.Contracts;
 
 namespace PaymentGateway.Api.Services;
 

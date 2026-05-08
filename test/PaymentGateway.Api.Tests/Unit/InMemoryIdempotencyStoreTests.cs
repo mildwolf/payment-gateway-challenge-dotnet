@@ -2,8 +2,9 @@ using PaymentGateway.Api.Models;
 using PaymentGateway.Api.Models.Responses;
 using PaymentGateway.Api.Services;
 
-namespace PaymentGateway.Api.Tests;
+namespace PaymentGateway.Api.Tests.Unit;
 
+[Trait("Category", "Unit")]
 public class InMemoryIdempotencyStoreTests
 {
     private static PostPaymentResponse TestPayment(Guid? id = null) => new()
@@ -29,7 +30,7 @@ public class InMemoryIdempotencyStoreTests
         var result = store.TryGet("key-1");
 
         Assert.NotNull(result);
-        Assert.Equal(payment.Id, result.Id);
+        Assert.Equal(payment.Id, result!.Id);
     }
 
     // Verifies that querying a key that was never stored returns null,
@@ -80,6 +81,6 @@ public class InMemoryIdempotencyStoreTests
 
         var result = store.TryGet("key-concurrent");
         Assert.NotNull(result);
-        Assert.True(result.Id == firstPayment.Id || result.Id == secondPayment.Id);
+        Assert.True(result!.Id == firstPayment.Id || result.Id == secondPayment.Id);
     }
 }

@@ -3,9 +3,11 @@ using System.Text;
 using System.Text.Json;
 using PaymentGateway.Api.Models.Requests;
 using PaymentGateway.Api.Services;
+using PaymentGateway.Api.Services.Contracts;
 
-namespace PaymentGateway.Api.Tests;
+namespace PaymentGateway.Api.Tests.Unit;
 
+[Trait("Category", "Unit")]
 public class BankServiceTests
 {
     private static PostPaymentRequest TestRequest() => new()
@@ -19,9 +21,9 @@ public class BankServiceTests
     };
 
     // Verifies that when the bank responds with authorized=true,
-    // ProcessPaymentAsync returns true, indicating the payment is approved.
+    // ProcessPaymentAsync returns a BankResponse with Authorized=true and the authorization code.
     [Fact]
-    public async Task ProcessPaymentAsync_Authorized_ReturnsTrue()
+    public async Task ProcessPaymentAsync_Authorized_ReturnsAuthorizedWithCode()
     {
         var handler = new MockHttpMessageHandler(HttpStatusCode.OK,
             JsonSerializer.Serialize(new { authorized = true, authorization_code = "abc-123" }));
@@ -30,13 +32,15 @@ public class BankServiceTests
 
         var result = await service.ProcessPaymentAsync(TestRequest());
 
-        Assert.True(result);
+        Assert.NotNull(result);
+        Assert.True(result!.Authorized);
+        Assert.Equal("abc-123", result.AuthorizationCode);
     }
 
     // Verifies that when the bank responds with authorized=false,
-    // ProcessPaymentAsync returns false, indicating the payment is declined.
+    // ProcessPaymentAsync returns a BankResponse with Authorized=false and empty authorization code.
     [Fact]
-    public async Task ProcessPaymentAsync_Declined_ReturnsFalse()
+    public async Task ProcessPaymentAsync_Declined_ReturnsDeclinedWithEmptyCode()
     {
         var handler = new MockHttpMessageHandler(HttpStatusCode.OK,
             JsonSerializer.Serialize(new { authorized = false, authorization_code = "" }));
@@ -45,14 +49,16 @@ public class BankServiceTests
 
         var result = await service.ProcessPaymentAsync(TestRequest());
 
-        Assert.False(result);
+        Assert.NotNull(result);
+        Assert.False(result!.Authorized);
+        Assert.Equal(string.Empty, result!.AuthorizationCode);
     }
 
     // Verifies that when the bank returns 503 Service Unavailable,
-    // ProcessPaymentAsync returns false (declined) rather than null or throwing,
-    // keeping the gateway available even when the bank is down.
+    // ProcessPaymentAsync returns a BankResponse with Authorized=false, keeping the gateway
+    // available even when the bank is down.
     [Fact]
-    public async Task ProcessPaymentAsync_ServiceUnavailable_ReturnsFalse()
+    public async Task ProcessPaymentAsync_ServiceUnavailable_ReturnsDeclined()
     {
         var handler = new MockHttpMessageHandler(HttpStatusCode.ServiceUnavailable, "{}");
 
@@ -60,7 +66,8 @@ public class BankServiceTests
 
         var result = await service.ProcessPaymentAsync(TestRequest());
 
-        Assert.False(result);
+        Assert.NotNull(result);
+        Assert.False(result!.Authorized);
     }
 
     // Verifies that when the bank is completely unreachable (network error),

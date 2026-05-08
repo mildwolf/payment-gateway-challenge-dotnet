@@ -3,14 +3,16 @@ using System.Net.Http.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 
-using PaymentGateway.Api.Controllers;
 using PaymentGateway.Api.Models;
 using PaymentGateway.Api.Models.Requests;
 using PaymentGateway.Api.Models.Responses;
 using PaymentGateway.Api.Services;
+using PaymentGateway.Api.Services.Contracts;
+using PaymentGateway.Api.Tests.Unit;
 
-namespace PaymentGateway.Api.Tests;
+namespace PaymentGateway.Api.Tests.Functional;
 
+[Trait("Category", "Functional")]
 public class PaymentsControllerTests
 {
     private readonly Random _random = new();
@@ -35,7 +37,7 @@ public class PaymentsControllerTests
         var paymentsRepository = new PaymentsRepository();
         paymentsRepository.Add(payment);
 
-        var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
+        var webApplicationFactory = new WebApplicationFactory<Program>();
         var client = webApplicationFactory.WithWebHostBuilder(builder =>
             builder.ConfigureServices(services =>
             {
@@ -52,7 +54,7 @@ public class PaymentsControllerTests
         // Assert
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.NotNull(paymentResponse);
-        Assert.Equal(payment.Id, paymentResponse.Id);
+        Assert.Equal(payment.Id, paymentResponse!.Id);
         Assert.Equal(payment.CardNumberLastFour, paymentResponse.CardNumberLastFour);
     }
 
@@ -62,7 +64,7 @@ public class PaymentsControllerTests
     public async Task Returns404IfPaymentNotFound()
     {
         // Arrange
-        var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
+        var webApplicationFactory = new WebApplicationFactory<Program>();
         var client = webApplicationFactory.WithWebHostBuilder(builder =>
             builder.ConfigureServices(services =>
             {
@@ -86,7 +88,7 @@ public class PaymentsControllerTests
     {
         // Arrange
         var fakeBank = new FakeBankService();
-        var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
+        var webApplicationFactory = new WebApplicationFactory<Program>();
         var client = webApplicationFactory.WithWebHostBuilder(builder =>
             builder.ConfigureServices(services =>
             {
@@ -111,7 +113,7 @@ public class PaymentsControllerTests
         // Assert
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.NotNull(paymentResponse);
-        Assert.Equal(PaymentStatus.Rejected, paymentResponse.Status);
+        Assert.Equal(PaymentStatus.Rejected, paymentResponse!.Status);
         Assert.Equal(Guid.Empty, paymentResponse.Id);
     }
 
@@ -124,7 +126,7 @@ public class PaymentsControllerTests
         // Arrange
         var fakeBank = new FakeBankService { Result = true };
 
-        var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
+        var webApplicationFactory = new WebApplicationFactory<Program>();
         var client = webApplicationFactory.WithWebHostBuilder(builder =>
             builder.ConfigureServices(services =>
             {
@@ -149,7 +151,7 @@ public class PaymentsControllerTests
         // Assert
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.NotNull(paymentResponse);
-        Assert.Equal(PaymentStatus.Authorized, paymentResponse.Status);
+        Assert.Equal(PaymentStatus.Authorized, paymentResponse!.Status);
         Assert.NotEqual(Guid.Empty, paymentResponse.Id);
         Assert.Equal("1111", paymentResponse.CardNumberLastFour);
     }
@@ -162,7 +164,7 @@ public class PaymentsControllerTests
         // Arrange
         var fakeBank = new FakeBankService { Result = false };
 
-        var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
+        var webApplicationFactory = new WebApplicationFactory<Program>();
         var client = webApplicationFactory.WithWebHostBuilder(builder =>
             builder.ConfigureServices(services =>
             {
@@ -187,7 +189,7 @@ public class PaymentsControllerTests
         // Assert
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.NotNull(paymentResponse);
-        Assert.Equal(PaymentStatus.Declined, paymentResponse.Status);
+        Assert.Equal(PaymentStatus.Declined, paymentResponse!.Status);
     }
 
     // Verifies POST /api/Payments returns Declined status when the bank is unreachable
@@ -199,7 +201,7 @@ public class PaymentsControllerTests
         // Arrange
         var fakeBank = new FakeBankService { Result = null };  // Simulates bank being unreachable
 
-        var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
+        var webApplicationFactory = new WebApplicationFactory<Program>();
         var client = webApplicationFactory.WithWebHostBuilder(builder =>
             builder.ConfigureServices(services =>
             {
@@ -224,7 +226,7 @@ public class PaymentsControllerTests
         // Assert
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.NotNull(paymentResponse);
-        Assert.Equal(PaymentStatus.Declined, paymentResponse.Status);
+        Assert.Equal(PaymentStatus.Declined, paymentResponse!.Status);
     }
 
     // Verifies end-to-end data integrity: a payment created via POST can be retrieved
@@ -235,7 +237,7 @@ public class PaymentsControllerTests
         // Arrange
         var fakeBank = new FakeBankService { Result = true };
 
-        var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
+        var webApplicationFactory = new WebApplicationFactory<Program>();
         var client = webApplicationFactory.WithWebHostBuilder(builder =>
             builder.ConfigureServices(services =>
             {
@@ -264,7 +266,7 @@ public class PaymentsControllerTests
         // Assert
         Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
         Assert.NotNull(getPayment);
-        Assert.Equal(postPayment.Id, getPayment.Id);
+        Assert.Equal(postPayment.Id, getPayment!.Id);
         Assert.Equal(PaymentStatus.Authorized, getPayment.Status);
         Assert.Equal("0001", getPayment.CardNumberLastFour);
         Assert.Equal(7500, getPayment.Amount);
@@ -278,7 +280,7 @@ public class PaymentsControllerTests
     {
         var fakeBank = new FakeBankService { Result = true };
 
-        var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
+        var webApplicationFactory = new WebApplicationFactory<Program>();
         var client = webApplicationFactory.WithWebHostBuilder(builder =>
             builder.ConfigureServices(services =>
             {
@@ -321,7 +323,7 @@ public class PaymentsControllerTests
         Assert.Equal(HttpStatusCode.OK, secondResponse.StatusCode);
         Assert.NotNull(firstPayment);
         Assert.NotNull(secondPayment);
-        Assert.Equal(firstPayment.Id, secondPayment.Id);
+        Assert.Equal(firstPayment!.Id, secondPayment!.Id);
         Assert.Equal(PaymentStatus.Authorized, firstPayment.Status);
         Assert.Equal(PaymentStatus.Authorized, secondPayment.Status);
     }
@@ -333,7 +335,7 @@ public class PaymentsControllerTests
     {
         var fakeBank = new FakeBankService { Result = true };
 
-        var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
+        var webApplicationFactory = new WebApplicationFactory<Program>();
         var client = webApplicationFactory.WithWebHostBuilder(builder =>
             builder.ConfigureServices(services =>
             {
@@ -379,7 +381,7 @@ public class PaymentsControllerTests
     {
         var fakeBank = new FakeBankService { Result = true };
 
-        var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
+        var webApplicationFactory = new WebApplicationFactory<Program>();
         var client = webApplicationFactory.WithWebHostBuilder(builder =>
             builder.ConfigureServices(services =>
             {
@@ -413,7 +415,7 @@ public class PaymentsControllerTests
     {
         var fakeBank = new FakeBankService { Result = true };
 
-        var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
+        var webApplicationFactory = new WebApplicationFactory<Program>();
         var client = webApplicationFactory.WithWebHostBuilder(builder =>
             builder.ConfigureServices(services =>
             {

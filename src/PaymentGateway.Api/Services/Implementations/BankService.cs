@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json.Serialization;
 using PaymentGateway.Api.Models.Requests;
+using PaymentGateway.Api.Services.Contracts;
 
 namespace PaymentGateway.Api.Services;
 
@@ -13,15 +14,15 @@ public class BankService : IBankService
         _httpClient = httpClient;
     }
 
-    public async Task<bool?> ProcessPaymentAsync(PostPaymentRequest request)
+    public async Task<BankResponse?> ProcessPaymentAsync(PostPaymentRequest request)
     {
-        var bankPayload = new
+        var bankPayload = new BankRequest
         {
-            card_number = request.CardNumber,
-            expiry_date = $"{request.ExpiryMonth:D2}/{request.ExpiryYear % 100:D2}",
-            currency = request.Currency,
-            amount = request.Amount,
-            cvv = request.Cvv
+            CardNumber = request.CardNumber,
+            ExpiryDate = $"{request.ExpiryMonth:D2}/{request.ExpiryYear % 100:D2}",
+            Currency = request.Currency,
+            Amount = request.Amount,
+            Cvv = request.Cvv
         };
 
         try
@@ -29,13 +30,20 @@ public class BankService : IBankService
             var response = await _httpClient.PostAsJsonAsync("/payments", bankPayload);
 
             if (response.StatusCode == HttpStatusCode.ServiceUnavailable)
-                return false;
+                return new BankResponse { Authorized = false };
 
             if (!response.IsSuccessStatusCode)
                 return null;
 
             var bankResponse = await response.Content.ReadFromJsonAsync<BankSimulatorResponse>();
-            return bankResponse?.Authorized;
+            if (bankResponse is null)
+                return null;
+
+            return new BankResponse
+            {
+                Authorized = bankResponse.Authorized,
+                AuthorizationCode = bankResponse.AuthorizationCode
+            };
         }
         catch (HttpRequestException)
         {

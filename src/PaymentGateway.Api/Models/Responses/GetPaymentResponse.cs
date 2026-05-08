@@ -9,4 +9,5 @@ public class GetPaymentResponse
     public int ExpiryYear { get; set; }
     public string Currency { get; set; } = string.Empty;
     public int Amount { get; set; }
+    public string AuthorizationCode { get; set; } = string.Empty;
 }
