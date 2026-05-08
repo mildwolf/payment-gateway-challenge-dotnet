@@ -1,3 +1,4 @@
+using PaymentGateway.Api.Extensions;
 using PaymentGateway.Api.Services;
 using PaymentGateway.Api.Services.Contracts;
 
@@ -12,7 +13,9 @@ builder.Services.AddSingleton<IIdempotencyStore, InMemoryIdempotencyStore>();
 builder.Services.AddHttpClient<IBankService, BankService>(client =>
 {
     client.BaseAddress = new Uri(builder.Configuration["BankService:Url"] ?? "http://localhost:8080");
-});
+    client.Timeout = Timeout.InfiniteTimeSpan;
+})
+.AddBankResiliencePipeline();
 
 var app = builder.Build();
 
