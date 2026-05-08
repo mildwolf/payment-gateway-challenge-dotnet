@@ -1,4 +1,7 @@
 # Payment Gateway Design Decisions
+## overall assumption
+## functionality
+## code structure / extendibility
 
 ## Contracts Directory (`Services/Contracts/`)
 

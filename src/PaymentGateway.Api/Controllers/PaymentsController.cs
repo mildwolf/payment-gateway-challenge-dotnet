@@ -35,13 +35,28 @@ public class PaymentsController : ControllerBase
     public async Task<ActionResult<PostPaymentResponse>> PostPaymentAsync([FromBody] PostPaymentRequest request)
     {
         var idempotencyKey = Request.Headers["Idempotency-Key"].FirstOrDefault();
+
         if (idempotencyKey is not null)
         {
-            var existingPayment = _idempotencyStore.TryGet(idempotencyKey);
-            if (existingPayment is not null)
+            var existingEntry = _idempotencyStore.TryReserve(idempotencyKey);
+
+            if (existingEntry is not null)
             {
-                _logger.LogInformation("Idempotent request for key {Key}, returning existing payment {Id}", idempotencyKey, existingPayment.Id);
-                return Ok(existingPayment);
+                if (existingEntry.Status == IdempotencyStatus.Completed)
+                {
+                    _logger.LogInformation("Idempotent request for key {Key}, returning existing payment {Id}",
+                        idempotencyKey, existingEntry.Response!.Id);
+                    return Ok(existingEntry.Response);
+                }
+
+                if (existingEntry.Status == IdempotencyStatus.InFlight)
+                {
+                    _logger.LogInformation("In-flight request for key {Key}, returning 409", idempotencyKey);
+                    return Problem(
+                        detail: "A request with this idempotency key is already being processed. Retry later.",
+                        statusCode: 409,
+                        title: "Request In Progress");
+                }
             }
         }
 
@@ -51,6 +66,9 @@ public class PaymentsController : ControllerBase
         var validationResult = _paymentValidator.Validate(request);
         if (!validationResult.IsValid)
         {
+            if (idempotencyKey is not null)
+                _idempotencyStore.TryEvict(idempotencyKey);
+
             _logger.LogWarning("Payment rejected due to validation errors: {Errors}", string.Join(", ", validationResult.Messages));
             return Ok(new PostPaymentResponse
             {
@@ -87,7 +105,12 @@ public class PaymentsController : ControllerBase
         _paymentsRepository.Add(payment);
 
         if (idempotencyKey is not null)
-            _idempotencyStore.TryAdd(idempotencyKey, payment);
+        {
+            if (!_idempotencyStore.TryComplete(idempotencyKey, payment))
+            {
+                _logger.LogWarning("Failed to complete idempotency entry for key {Key}", idempotencyKey);
+            }
+        }
 
         return Ok(payment);
     }

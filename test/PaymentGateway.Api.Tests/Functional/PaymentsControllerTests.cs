@@ -408,6 +408,61 @@ public class PaymentsControllerTests
         Assert.NotEqual(firstPayment!.Id, secondPayment!.Id);
     }
 
+    // Scenario C: when a request with the same idempotency key arrives while the first
+    // is still being processed (InFlight), the gateway returns 409 Conflict.
+    [Fact]
+    public async Task PostWithIdempotencyKey_InFlightRequest_Returns409()
+    {
+        var tcs = new TaskCompletionSource<BankResponse?>();
+        var fakeBank = new FakeBankService { Result = true, CompletionSource = tcs };
+
+        var webApplicationFactory = new WebApplicationFactory<Program>();
+        var client = webApplicationFactory.WithWebHostBuilder(builder =>
+            builder.ConfigureServices(services =>
+            {
+                ((ServiceCollection)services).AddSingleton<IBankService>(fakeBank);
+            }))
+            .CreateClient();
+
+        var request = new PostPaymentRequest
+        {
+            CardNumber = "4111111111111111",
+            ExpiryMonth = 12,
+            ExpiryYear = 2030,
+            Currency = "GBP",
+            Amount = 1000,
+            Cvv = "123"
+        };
+
+        // First request — will block on the bank call
+        var firstRequest = new HttpRequestMessage(HttpMethod.Post, "/api/Payments")
+        {
+            Content = JsonContent.Create(request)
+        };
+        firstRequest.Headers.Add("Idempotency-Key", "inflight-key");
+
+        var firstTask = client.SendAsync(firstRequest);
+
+        // Second request with same key — should get 409 while first is still in-flight
+        var secondRequest = new HttpRequestMessage(HttpMethod.Post, "/api/Payments")
+        {
+            Content = JsonContent.Create(request)
+        };
+        secondRequest.Headers.Add("Idempotency-Key", "inflight-key");
+
+        var secondResponse = await client.SendAsync(secondRequest);
+        Assert.Equal(HttpStatusCode.Conflict, secondResponse.StatusCode);
+
+        // Complete the first request's bank call
+        tcs.SetResult(new BankResponse { Authorized = true, AuthorizationCode = "auth-123" });
+
+        var firstResponse = await firstTask;
+        Assert.Equal(HttpStatusCode.OK, firstResponse.StatusCode);
+
+        var firstPayment = await firstResponse.Content.ReadFromJsonAsync<PostPaymentResponse>();
+        Assert.Equal(PaymentStatus.Authorized, firstPayment!.Status);
+    }
+
     // Verifies that a Rejected payment (validation failure) does not store its idempotency key,
     // so the client can fix the request and retry with the same key to create a valid payment.
     [Fact]
