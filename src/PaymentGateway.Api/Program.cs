@@ -7,6 +7,7 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 builder.Services.AddSingleton<IPaymentsRepository, PaymentsRepository>();
+builder.Services.AddSingleton<IIdempotencyStore, InMemoryIdempotencyStore>();
 builder.Services.AddHttpClient<IBankService, BankService>(client =>
 {
     client.BaseAddress = new Uri(builder.Configuration["BankService:Url"] ?? "http://localhost:8080");

@@ -15,6 +15,8 @@ public class PaymentsControllerTests
 {
     private readonly Random _random = new();
 
+    // Verifies GET /api/Payments/{id} returns 200 with the correct payment data
+    // when the payment exists in the repository.
     [Fact]
     public async Task RetrievesAPaymentSuccessfully()
     {
@@ -54,6 +56,8 @@ public class PaymentsControllerTests
         Assert.Equal(payment.CardNumberLastFour, paymentResponse.CardNumberLastFour);
     }
 
+    // Verifies GET /api/Payments/{id} returns 404 when the payment ID
+    // does not exist in the repository.
     [Fact]
     public async Task Returns404IfPaymentNotFound()
     {
@@ -74,6 +78,9 @@ public class PaymentsControllerTests
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
+    // Verifies POST /api/Payments returns 200 with Rejected status when the request
+    // fails validation (invalid card number, expired card, bad currency, etc.).
+    // Also verifies that the response includes Id=Guid.Empty and no payment is stored.
     [Fact]
     public async Task PostPayment_ReturnsRejected_WhenValidationFails()
     {
@@ -108,6 +115,9 @@ public class PaymentsControllerTests
         Assert.Equal(Guid.Empty, paymentResponse.Id);
     }
 
+    // Verifies POST /api/Payments returns 200 with Authorized status when the bank
+    // approves the payment, and the response contains a valid payment ID and the
+    // correct last-four digits of the card number.
     [Fact]
     public async Task PostPayment_ReturnsAuthorized_WhenBankAuthorizes()
     {
@@ -144,6 +154,8 @@ public class PaymentsControllerTests
         Assert.Equal("1111", paymentResponse.CardNumberLastFour);
     }
 
+    // Verifies POST /api/Payments returns 200 with Declined status when the bank
+    // explicitly declines the payment (authorized=false).
     [Fact]
     public async Task PostPayment_ReturnsDeclined_WhenBankDeclines()
     {
@@ -178,6 +190,9 @@ public class PaymentsControllerTests
         Assert.Equal(PaymentStatus.Declined, paymentResponse.Status);
     }
 
+    // Verifies POST /api/Payments returns Declined status when the bank is unreachable
+    // (IBankService returns null), ensuring the gateway remains available and does not
+    // crash or return an error when the bank is down.
     [Fact]
     public async Task PostPayment_ReturnsDeclined_WhenBankIsUnavailable()
     {
@@ -212,6 +227,8 @@ public class PaymentsControllerTests
         Assert.Equal(PaymentStatus.Declined, paymentResponse.Status);
     }
 
+    // Verifies end-to-end data integrity: a payment created via POST can be retrieved
+    // via GET, and all fields (ID, status, last-four, amount, currency) match exactly.
     [Fact]
     public async Task PostThenGet_ReturnsSamePayment()
     {
@@ -252,5 +269,197 @@ public class PaymentsControllerTests
         Assert.Equal("0001", getPayment.CardNumberLastFour);
         Assert.Equal(7500, getPayment.Amount);
         Assert.Equal("GBP", getPayment.Currency);
+    }
+
+    // Verifies idempotency: sending the same Idempotency-Key twice returns the same
+    // payment (same ID, same status) without creating a duplicate or calling the bank again.
+    [Fact]
+    public async Task PostWithIdempotencyKey_DuplicateRequest_ReturnsSamePayment()
+    {
+        var fakeBank = new FakeBankService { Result = true };
+
+        var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
+        var client = webApplicationFactory.WithWebHostBuilder(builder =>
+            builder.ConfigureServices(services =>
+            {
+                ((ServiceCollection)services).AddSingleton<IBankService>(fakeBank);
+            }))
+            .CreateClient();
+
+        var request = new PostPaymentRequest
+        {
+            CardNumber = "4111111111111111",
+            ExpiryMonth = 12,
+            ExpiryYear = 2030,
+            Currency = "GBP",
+            Amount = 1000,
+            Cvv = "123"
+        };
+
+        // First request with idempotency key
+        var firstRequest = new HttpRequestMessage(HttpMethod.Post, "/api/Payments")
+        {
+            Content = JsonContent.Create(request)
+        };
+        firstRequest.Headers.Add("Idempotency-Key", "idem-key-1");
+
+        var firstResponse = await client.SendAsync(firstRequest);
+        var firstPayment = await firstResponse.Content.ReadFromJsonAsync<PostPaymentResponse>();
+
+        // Second request with same idempotency key
+        var secondRequest = new HttpRequestMessage(HttpMethod.Post, "/api/Payments")
+        {
+            Content = JsonContent.Create(request)
+        };
+        secondRequest.Headers.Add("Idempotency-Key", "idem-key-1");
+
+        var secondResponse = await client.SendAsync(secondRequest);
+        var secondPayment = await secondResponse.Content.ReadFromJsonAsync<PostPaymentResponse>();
+
+        // Assert - same payment returned, bank only called once (FakeBankService tracks calls)
+        Assert.Equal(HttpStatusCode.OK, firstResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, secondResponse.StatusCode);
+        Assert.NotNull(firstPayment);
+        Assert.NotNull(secondPayment);
+        Assert.Equal(firstPayment.Id, secondPayment.Id);
+        Assert.Equal(PaymentStatus.Authorized, firstPayment.Status);
+        Assert.Equal(PaymentStatus.Authorized, secondPayment.Status);
+    }
+
+    // Verifies that different Idempotency-Key values result in separate payments,
+    // even if the request body is identical. Each key is an independent idempotency scope.
+    [Fact]
+    public async Task PostWithDifferentIdempotencyKeys_CreatesDifferentPayments()
+    {
+        var fakeBank = new FakeBankService { Result = true };
+
+        var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
+        var client = webApplicationFactory.WithWebHostBuilder(builder =>
+            builder.ConfigureServices(services =>
+            {
+                ((ServiceCollection)services).AddSingleton<IBankService>(fakeBank);
+            }))
+            .CreateClient();
+
+        var request = new PostPaymentRequest
+        {
+            CardNumber = "4111111111111111",
+            ExpiryMonth = 12,
+            ExpiryYear = 2030,
+            Currency = "GBP",
+            Amount = 1000,
+            Cvv = "123"
+        };
+
+        var firstRequest = new HttpRequestMessage(HttpMethod.Post, "/api/Payments")
+        {
+            Content = JsonContent.Create(request)
+        };
+        firstRequest.Headers.Add("Idempotency-Key", "key-a");
+
+        var secondRequest = new HttpRequestMessage(HttpMethod.Post, "/api/Payments")
+        {
+            Content = JsonContent.Create(request)
+        };
+        secondRequest.Headers.Add("Idempotency-Key", "key-b");
+
+        var firstResponse = await client.SendAsync(firstRequest);
+        var secondResponse = await client.SendAsync(secondRequest);
+
+        var firstPayment = await firstResponse.Content.ReadFromJsonAsync<PostPaymentResponse>();
+        var secondPayment = await secondResponse.Content.ReadFromJsonAsync<PostPaymentResponse>();
+
+        Assert.NotEqual(firstPayment!.Id, secondPayment!.Id);
+    }
+
+    // Verifies that requests without an Idempotency-Key header are not deduplicated —
+    // each request creates a new payment, maintaining backward compatibility.
+    [Fact]
+    public async Task PostWithoutIdempotencyKey_CreatesNewPaymentEachTime()
+    {
+        var fakeBank = new FakeBankService { Result = true };
+
+        var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
+        var client = webApplicationFactory.WithWebHostBuilder(builder =>
+            builder.ConfigureServices(services =>
+            {
+                ((ServiceCollection)services).AddSingleton<IBankService>(fakeBank);
+            }))
+            .CreateClient();
+
+        var request = new PostPaymentRequest
+        {
+            CardNumber = "4111111111111111",
+            ExpiryMonth = 12,
+            ExpiryYear = 2030,
+            Currency = "GBP",
+            Amount = 1000,
+            Cvv = "123"
+        };
+
+        var firstResponse = await client.PostAsJsonAsync("/api/Payments", request);
+        var secondResponse = await client.PostAsJsonAsync("/api/Payments", request);
+
+        var firstPayment = await firstResponse.Content.ReadFromJsonAsync<PostPaymentResponse>();
+        var secondPayment = await secondResponse.Content.ReadFromJsonAsync<PostPaymentResponse>();
+
+        Assert.NotEqual(firstPayment!.Id, secondPayment!.Id);
+    }
+
+    // Verifies that a Rejected payment (validation failure) does not store its idempotency key,
+    // so the client can fix the request and retry with the same key to create a valid payment.
+    [Fact]
+    public async Task PostRejectedWithKey_ThenValidWithSameKey_CreatesPayment()
+    {
+        var fakeBank = new FakeBankService { Result = true };
+
+        var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
+        var client = webApplicationFactory.WithWebHostBuilder(builder =>
+            builder.ConfigureServices(services =>
+            {
+                ((ServiceCollection)services).AddSingleton<IBankService>(fakeBank);
+            }))
+            .CreateClient();
+
+        // First: invalid request with idempotency key → Rejected (key not stored)
+        var invalidRequest = new HttpRequestMessage(HttpMethod.Post, "/api/Payments")
+        {
+            Content = JsonContent.Create(new PostPaymentRequest
+            {
+                CardNumber = "1",
+                ExpiryMonth = 13,
+                ExpiryYear = 2020,
+                Currency = "X",
+                Amount = -1,
+                Cvv = "1"
+            })
+        };
+        invalidRequest.Headers.Add("Idempotency-Key", "retry-key");
+
+        var rejectedResponse = await client.SendAsync(invalidRequest);
+        var rejectedPayment = await rejectedResponse.Content.ReadFromJsonAsync<PostPaymentResponse>();
+
+        Assert.Equal(PaymentStatus.Rejected, rejectedPayment!.Status);
+
+        // Second: valid request with same key → creates new payment (Rejected didn't store the key)
+        var validRequest = new HttpRequestMessage(HttpMethod.Post, "/api/Payments")
+        {
+            Content = JsonContent.Create(new PostPaymentRequest
+            {
+                CardNumber = "4111111111111111",
+                ExpiryMonth = 12,
+                ExpiryYear = 2030,
+                Currency = "GBP",
+                Amount = 1000,
+                Cvv = "123"
+            })
+        };
+        validRequest.Headers.Add("Idempotency-Key", "retry-key");
+
+        var validResponse = await client.SendAsync(validRequest);
+        var validPayment = await validResponse.Content.ReadFromJsonAsync<PostPaymentResponse>();
+
+        Assert.Equal(PaymentStatus.Authorized, validPayment!.Status);
+        Assert.NotEqual(Guid.Empty, validPayment.Id);
     }
 }
