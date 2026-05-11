@@ -6,6 +6,13 @@ namespace PaymentGateway.Api.Services;
 
 public class PaymentValidator
 {
+    private readonly ISupportedCurrencyChecker _currencyChecker;
+
+    public PaymentValidator(ISupportedCurrencyChecker currencyChecker)
+    {
+        _currencyChecker = currencyChecker;
+    }
+
     public ValidationResult Validate(PostPaymentRequest request)
     {
         var errors = PaymentValidationError.None;
@@ -37,6 +44,11 @@ public class PaymentValidator
         {
             errors |= PaymentValidationError.CurrencyInvalid;
             messages.Add("Currency must be a 3-letter ISO 4217 code");
+        }
+        else if (!_currencyChecker.IsSupported(request.Currency))
+        {
+            errors |= PaymentValidationError.CurrencyNotSupported;
+            messages.Add($"Currency '{request.Currency}' is not supported");
         }
 
         if (request.Amount < 0)

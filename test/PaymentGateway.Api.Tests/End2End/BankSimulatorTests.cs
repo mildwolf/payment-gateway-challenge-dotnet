@@ -1,5 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -14,6 +16,11 @@ namespace PaymentGateway.Api.Tests.End2End;
 [Trait("Category", "End2End")]
 public class BankSimulatorTests
 {
+    private static readonly JsonSerializerOptions _jsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        Converters = { new JsonStringEnumConverter() }
+    };
+
     private static HttpClient CreateClient()
     {
         var factory = new WebApplicationFactory<Program>();
@@ -34,7 +41,7 @@ public class BankSimulatorTests
         var request = ValidRequest("4111111111111111");
 
         var response = await client.PostAsJsonAsync("/api/Payments", request);
-        var payment = await response.Content.ReadFromJsonAsync<PostPaymentResponse>();
+        var payment = await response.Content.ReadFromJsonAsync<PostPaymentResponse>(_jsonOptions);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.NotNull(payment);
@@ -50,7 +57,7 @@ public class BankSimulatorTests
         var request = ValidRequest("4111111111111113");
 
         var response = await client.PostAsJsonAsync("/api/Payments", request);
-        var payment = await response.Content.ReadFromJsonAsync<PostPaymentResponse>();
+        var payment = await response.Content.ReadFromJsonAsync<PostPaymentResponse>(_jsonOptions);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.NotNull(payment);
@@ -66,7 +73,7 @@ public class BankSimulatorTests
         var request = ValidRequest("4111111111111112");
 
         var response = await client.PostAsJsonAsync("/api/Payments", request);
-        var payment = await response.Content.ReadFromJsonAsync<PostPaymentResponse>();
+        var payment = await response.Content.ReadFromJsonAsync<PostPaymentResponse>(_jsonOptions);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.NotNull(payment);
@@ -82,7 +89,7 @@ public class BankSimulatorTests
         var request = ValidRequest("4111111111111114");
 
         var response = await client.PostAsJsonAsync("/api/Payments", request);
-        var payment = await response.Content.ReadFromJsonAsync<PostPaymentResponse>();
+        var payment = await response.Content.ReadFromJsonAsync<PostPaymentResponse>(_jsonOptions);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.NotNull(payment);
@@ -98,7 +105,7 @@ public class BankSimulatorTests
         var request = ValidRequest("4111111111111110");
 
         var response = await client.PostAsJsonAsync("/api/Payments", request);
-        var payment = await response.Content.ReadFromJsonAsync<PostPaymentResponse>();
+        var payment = await response.Content.ReadFromJsonAsync<PostPaymentResponse>(_jsonOptions);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.NotNull(payment);
@@ -113,12 +120,12 @@ public class BankSimulatorTests
         var request = ValidRequest("5500000000000001");
 
         var postResponse = await client.PostAsJsonAsync("/api/Payments", request);
-        var postPayment = await postResponse.Content.ReadFromJsonAsync<PostPaymentResponse>();
+        var postPayment = await postResponse.Content.ReadFromJsonAsync<PostPaymentResponse>(_jsonOptions);
 
         Assert.Equal(PaymentStatus.Authorized, postPayment!.Status);
 
         var getResponse = await client.GetAsync($"/api/Payments/{postPayment.Id}");
-        var getPayment = await getResponse.Content.ReadFromJsonAsync<GetPaymentResponse>();
+        var getPayment = await getResponse.Content.ReadFromJsonAsync<GetPaymentResponse>(_jsonOptions);
 
         Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
         Assert.NotNull(getPayment);
@@ -137,12 +144,12 @@ public class BankSimulatorTests
         var request = ValidRequest("5500000000000002");
 
         var postResponse = await client.PostAsJsonAsync("/api/Payments", request);
-        var postPayment = await postResponse.Content.ReadFromJsonAsync<PostPaymentResponse>();
+        var postPayment = await postResponse.Content.ReadFromJsonAsync<PostPaymentResponse>(_jsonOptions);
 
         Assert.Equal(PaymentStatus.Declined, postPayment!.Status);
 
         var getResponse = await client.GetAsync($"/api/Payments/{postPayment.Id}");
-        var getPayment = await getResponse.Content.ReadFromJsonAsync<GetPaymentResponse>();
+        var getPayment = await getResponse.Content.ReadFromJsonAsync<GetPaymentResponse>(_jsonOptions);
 
         Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
         Assert.NotNull(getPayment);
@@ -165,7 +172,7 @@ public class BankSimulatorTests
         firstRequest.Headers.Add("Idempotency-Key", "e2e-idem-key-1");
 
         var firstResponse = await client.SendAsync(firstRequest);
-        var firstPayment = await firstResponse.Content.ReadFromJsonAsync<PostPaymentResponse>();
+        var firstPayment = await firstResponse.Content.ReadFromJsonAsync<PostPaymentResponse>(_jsonOptions);
 
         var secondRequest = new HttpRequestMessage(HttpMethod.Post, "/api/Payments")
         {
@@ -174,7 +181,7 @@ public class BankSimulatorTests
         secondRequest.Headers.Add("Idempotency-Key", "e2e-idem-key-1");
 
         var secondResponse = await client.SendAsync(secondRequest);
-        var secondPayment = await secondResponse.Content.ReadFromJsonAsync<PostPaymentResponse>();
+        var secondPayment = await secondResponse.Content.ReadFromJsonAsync<PostPaymentResponse>(_jsonOptions);
 
         Assert.Equal(HttpStatusCode.OK, firstResponse.StatusCode);
         Assert.Equal(HttpStatusCode.OK, secondResponse.StatusCode);
@@ -206,8 +213,8 @@ public class BankSimulatorTests
         var firstResponse = await client.SendAsync(firstRequest);
         var secondResponse = await client.SendAsync(secondRequest);
 
-        var firstPayment = await firstResponse.Content.ReadFromJsonAsync<PostPaymentResponse>();
-        var secondPayment = await secondResponse.Content.ReadFromJsonAsync<PostPaymentResponse>();
+        var firstPayment = await firstResponse.Content.ReadFromJsonAsync<PostPaymentResponse>(_jsonOptions);
+        var secondPayment = await secondResponse.Content.ReadFromJsonAsync<PostPaymentResponse>(_jsonOptions);
 
         Assert.NotEqual(firstPayment!.Id, secondPayment!.Id);
     }

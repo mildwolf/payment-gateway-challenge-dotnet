@@ -7,7 +7,7 @@ namespace PaymentGateway.Api.Tests.Unit;
 [Trait("Category", "Unit")]
 public class PaymentValidatorTests
 {
-    private readonly PaymentValidator _validator = new();
+    private readonly PaymentValidator _validator = new(new SupportedCurrencyChecker(["USD", "EUR", "GBP"]));
 
     private PostPaymentRequest ValidRequest() => new()
     {
@@ -167,6 +167,17 @@ public class PaymentValidatorTests
         Assert.False(result.IsValid);
         Assert.Equal(PaymentValidationError.CurrencyInvalid, result.Errors);
         Assert.Single(result.Messages);
+    }
+
+    // Verifies that a well-formed but unsupported currency code is rejected.
+    [Fact]
+    public void Validate_CurrencyNotSupported_HasCurrencyNotSupported()
+    {
+        var result = _validator.Validate(ValidRequestWith(x => x.Currency = "JPY"));
+        Assert.False(result.IsValid);
+        Assert.Equal(PaymentValidationError.CurrencyNotSupported, result.Errors);
+        Assert.Single(result.Messages);
+        Assert.Contains("not supported", result.Messages[0]);
     }
 
     // Verifies that a negative amount is rejected with AmountInvalid flag.

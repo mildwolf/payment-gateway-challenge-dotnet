@@ -22,12 +22,13 @@ public class PaymentsController : ControllerBase
         IPaymentsRepository paymentsRepository,
         IBankService bankService,
         IIdempotencyStore idempotencyStore,
+        PaymentValidator paymentValidator,
         ILogger<PaymentsController> logger)
     {
         _paymentsRepository = paymentsRepository;
         _bankService = bankService;
         _idempotencyStore = idempotencyStore;
-        _paymentValidator = new PaymentValidator();
+        _paymentValidator = paymentValidator;
         _logger = logger;
     }
 

@@ -1,5 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -15,6 +17,11 @@ namespace PaymentGateway.Api.Tests.Functional;
 [Trait("Category", "Functional")]
 public class BankResilienceTests
 {
+    private static readonly JsonSerializerOptions _jsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        Converters = { new JsonStringEnumConverter() }
+    };
+
     private static PostPaymentRequest ValidRequest() => new()
     {
         CardNumber = "4111111111111111",
@@ -53,7 +60,7 @@ public class BankResilienceTests
 
         // Act
         var response = await client.PostAsJsonAsync("/api/Payments", ValidRequest());
-        var payment = await response.Content.ReadFromJsonAsync<PostPaymentResponse>();
+        var payment = await response.Content.ReadFromJsonAsync<PostPaymentResponse>(_jsonOptions);
 
         // Assert
         Assert.Equal(PaymentStatus.Authorized, payment!.Status);
@@ -89,7 +96,7 @@ public class BankResilienceTests
 
         // Act
         var response = await client.PostAsJsonAsync("/api/Payments", ValidRequest());
-        var payment = await response.Content.ReadFromJsonAsync<PostPaymentResponse>();
+        var payment = await response.Content.ReadFromJsonAsync<PostPaymentResponse>(_jsonOptions);
 
         // Assert
         Assert.Equal(PaymentStatus.Authorized, payment!.Status);
@@ -126,7 +133,7 @@ public class BankResilienceTests
 
         // Act
         var response = await client.PostAsJsonAsync("/api/Payments", ValidRequest());
-        var payment = await response.Content.ReadFromJsonAsync<PostPaymentResponse>();
+        var payment = await response.Content.ReadFromJsonAsync<PostPaymentResponse>(_jsonOptions);
 
         // Assert
         Assert.Equal(PaymentStatus.Declined, payment!.Status);
@@ -162,7 +169,7 @@ public class BankResilienceTests
 
         // Act
         var response = await client.PostAsJsonAsync("/api/Payments", ValidRequest());
-        var payment = await response.Content.ReadFromJsonAsync<PostPaymentResponse>();
+        var payment = await response.Content.ReadFromJsonAsync<PostPaymentResponse>(_jsonOptions);
 
         // Assert
         Assert.Equal(PaymentStatus.Declined, payment!.Status);
@@ -196,7 +203,7 @@ public class BankResilienceTests
 
         // Act
         var response = await client.PostAsJsonAsync("/api/Payments", ValidRequest());
-        var payment = await response.Content.ReadFromJsonAsync<PostPaymentResponse>();
+        var payment = await response.Content.ReadFromJsonAsync<PostPaymentResponse>(_jsonOptions);
 
         // Assert
         Assert.Equal(PaymentStatus.Authorized, payment!.Status);

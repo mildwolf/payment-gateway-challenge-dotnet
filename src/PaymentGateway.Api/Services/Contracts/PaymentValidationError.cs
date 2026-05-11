@@ -9,5 +9,6 @@ public enum PaymentValidationError
     CardExpired = 4,
     CurrencyInvalid = 8,
     AmountInvalid = 16,
-    CvvInvalid = 32
+    CvvInvalid = 32,
+    CurrencyNotSupported = 64
 }
